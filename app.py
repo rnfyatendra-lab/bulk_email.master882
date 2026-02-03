@@ -1,112 +1,113 @@
 import streamlit as st
 import smtplib
 import time
-import random
 import concurrent.futures
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
 # --- Page Config ---
-st.set_page_config(page_title="Safe Mailer Pro", layout="centered")
+st.set_page_config(page_title="Radhe Radhe Turbo Mailer", layout="wide")
 
-# --- UI Styling ---
+# --- CSS (Exactly like your original) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #0e1117; color: white; }
-    .main-box {
-        background-color: #1d2129; padding: 30px; border-radius: 15px;
-        border: 1px solid #343a40;
+    .stApp { background-color: #f0f2f6; }
+    .main-card {
+        background-color: white; padding: 30px; border-radius: 15px;
+        box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
+        max-width: 950px; margin: auto; border: 1px solid #e0e4e9;
     }
-    input, textarea { background-color: #2b313e !important; color: white !important; border: 1px solid #454d5e !important; }
-    .stButton>button {
-        width: 100%; background: linear-gradient(45deg, #FF4B4B, #FF8F8F);
-        color: white; font-weight: bold; border-radius: 10px; height: 3em;
+    input, textarea { color: #000000 !important; font-weight: 500 !important; background-color: #ffffff !important; }
+    label p { color: #333333 !important; font-weight: bold !important; }
+    div.stButton > button:first-child {
+        width: 100%; height: 70px; background-color: #4285F4 !important;
+        color: white !important; font-size: 20px !important; font-weight: bold;
+        border-radius: 10px; border: none;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # --- Authentication ---
-if 'auth' not in st.session_state: st.session_state.auth = False
+if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 
-if not st.session_state.auth:
-    st.markdown("<h2 style='text-align:center;'>🔐 System Locked</h2>", unsafe_allow_html=True)
-    user_cred = st.text_input("Username")
-    pass_cred = st.text_input("Password", type="password")
-    if st.button("Access Terminal"):
-        if user_cred == "@#2026@#" and pass_cred == "@#2026@#":
-            st.session_state.auth = True
+if not st.session_state.logged_in:
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
+    if st.button("LOGIN"):
+        if u == "@#2026@#" and p == "@#2026@#":
+            st.session_state.logged_in = True
             st.rerun()
         else:
-            st.error("Access Denied!")
+            st.error("Invalid Credentials")
 else:
-    # --- Dashboard ---
-    st.markdown("<h1 style='text-align: center; color: #FF4B4B;'>🚀 Safe Fast Mailer</h1>", unsafe_allow_html=True)
+    st.markdown('<div class="main-card">', unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>📧 Fast Mail Launcher Pro</h2>", unsafe_allow_html=True)
     
-    with st.container():
-        col1, col2 = st.columns(2)
-        with col1:
-            s_name = st.text_input("Sender Name", value="Official Notification")
-            s_email = st.text_input("Your Gmail")
-        with col2:
-            s_pass = st.text_input("App Password", type="password")
-            subject = st.text_input("Subject Line")
-        
-        body = st.text_area("Message Body (HTML Supported)", height=150)
-        recipients = st.text_area("Recipients (One per line)", height=150)
-        
-        # Speed Settings
-        speed = st.select_slider("Sending Speed Mode", options=["Safe", "Balanced", "Turbo"])
-        threads = {"Safe": 2, "Balanced": 5, "Turbo": 10}[speed]
+    # --- UI with 6 Columns (Exactly as requested) ---
+    col1, col2 = st.columns(2)
+    with col1: s_name = st.text_input("Sender Name", key="sn")
+    with col2: s_email = st.text_input("Your Gmail", key="se")
+    
+    col3, col4 = st.columns(2)
+    with col3: s_pass = st.text_input("App Password", type="password", key="sp")
+    with col4: subject = st.text_input("Subject", key="sub")
+    
+    col5, col6 = st.columns(2)
+    with col5: body = st.text_area("Message Body", height=150, key="msg")
+    with col6: recipients_raw = st.text_area("Recipients", height=150, key="rec")
 
-    # --- Sending Logic ---
-    def send_mail_secure(to_email):
+    # --- Worker Function (Anti-Spam Logic) ---
+    def send_mail_task(target_email):
         try:
-            msg = MIMEMultipart('alternative')
+            msg = MIMEMultipart()
             msg['Subject'] = subject
             msg['From'] = formataddr((s_name, s_email))
-            msg['To'] = to_email
-            msg['Message-ID'] = make_msgid() # Random ID for anti-spam
-            
-            # Anti-Spam Headers
-            msg['List-Unsubscribe'] = f'<mailto:{s_email}>'
-            msg.attach(MIMEText(body, 'html'))
+            msg['To'] = target_email
+            msg['Message-ID'] = make_msgid() # Avoids spam filters
+            msg['X-Priority'] = '3'
+            msg.attach(MIMEText(body, 'html')) # HTML for better delivery
 
-            # Har email ke liye naya handshake (Safe Practice)
             with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
                 server.starttls()
                 server.login(s_email, s_pass)
                 server.send_message(msg)
-            
-            # Random delay to mimic human behavior
-            time.sleep(random.uniform(0.5, 1.5)) 
-            return True, to_email
+            return True, target_email
         except Exception as e:
-            return False, f"{to_email}: {str(e)}"
+            return False, f"{target_email}: {str(e)}"
 
-    if st.button("ENGAGE LAUNCHER"):
-        email_list = [e.strip() for e in recipients.split('\n') if e.strip()]
+    # --- Sending Process ---
+    if st.button("Send All (Turbo Mode)"):
+        email_list = list(dict.fromkeys([e.strip() for e in recipients_raw.replace(',', '\n').split('\n') if e.strip()]))
         
         if s_email and s_pass and email_list:
-            bar = st.progress(0)
-            status = st.empty()
+            progress_bar = st.progress(0)
+            status_area = st.empty()
             success_count = 0
             
-            # Parallel Processing
-            with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
-                results = list(executor.map(send_mail_secure, email_list))
+            # Using ThreadPoolExecutor for real speed
+            # Max_workers=5 is safe for Gmail to prevent IP block
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                futures = {executor.submit(send_mail_task, email): email for email in email_list}
                 
-                for i, (ok, res) in enumerate(results):
-                    if ok: success_count += 1
-                    else: st.warning(f"Failed: {res}")
-                    bar.progress((i + 1) / len(email_list))
-                    status.info(f"Progress: {i+1}/{len(email_list)} emails processed.")
+                for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                    success, result = future.result()
+                    if success:
+                        success_count += 1
+                    else:
+                        st.error(f"Failed: {result}")
+                    
+                    # Update Progress
+                    progress = (i + 1) / len(email_list)
+                    progress_bar.progress(progress)
+                    status_area.text(f"🚀 Speed: Active | Sent: {i+1}/{len(email_list)}")
 
-            st.success(f"Mission Complete! {success_count} emails sent.")
+            st.success(f"✅ Mission Accomplished! {success_count} emails delivered.")
             st.balloons()
         else:
-            st.error("Please fill all fields!")
+            st.warning("Please fill all details and recipient list.")
 
-    if st.sidebar.button("Log Out"):
-        st.session_state.auth = False
+    if st.button("Logout"):
+        st.session_state.logged_in = False
         st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
