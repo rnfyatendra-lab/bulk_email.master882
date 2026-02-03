@@ -1,76 +1,124 @@
-import os
+import streamlit as st
 import smtplib
-from flask import Flask, render_template_string, request
-from email.message import EmailMessage
+import time
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
-app = Flask(__name__)
+# --- Page Config ---
+st.set_page_config(page_title="Radhe Radhe Mailer", layout="wide")
 
-# --- Configuration (Hosting panel se uthayega) ---
-EMAIL_ADDRESS = os.environ.get('EMAIL_USER')
-EMAIL_PASSWORD = os.environ.get('EMAIL_PASS')
-
-HTML_TEMPLATE = '''
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Emailer</title>
+# --- CSS (Visibility & Design) ---
+st.markdown("""
     <style>
-        body { font-family: sans-serif; margin: 40px; background: #f4f4f4; }
-        .container { max-width: 600px; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        input, textarea, button { width: 100%; margin-bottom: 15px; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { background: #007bff; color: white; border: none; cursor: pointer; font-weight: bold; }
-        button:hover { background: #0056b3; }
-        .status { padding: 10px; border-radius: 4px; background: #e2f3ff; color: #004085; }
+    .stApp { background-color: #f0f2f6; }
+    .main-card {
+        background-color: white; padding: 30px; border-radius: 15px;
+        box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
+        max-width: 950px; margin: auto; border: 1px solid #e0e4e9;
+    }
+    input, textarea { color: #000000 !important; font-weight: 500 !important; background-color: #ffffff !important; }
+    label p { color: #333333 !important; font-weight: bold !important; }
+    div.stButton > button:first-child {
+        width: 100%; height: 70px; background-color: #4285F4 !important;
+        color: white !important; font-size: 20px !important; font-weight: bold;
+        border-radius: 10px; border: none;
+    }
     </style>
-</head>
-<body>
-    <div class="container">
-        <h2>🚀 Bulk Email Sender</h2>
-        <form method="POST">
-            <input type="text" name="subject" placeholder="Email Subject" required>
-            <textarea name="recipients" placeholder="Recipient Emails (comma separated)" rows="4" required></textarea>
-            <textarea name="body" placeholder="Write your message here..." rows="6" required></textarea>
-            <button type="submit">Send Bulk Emails</button>
-        </form>
-        {% if status %}<div class="status">{{ status }}</div>{% endif %}
-    </div>
-</body>
-</html>
-'''
+""", unsafe_allow_html=True)
 
-@app.route('/', methods=['GET', 'POST'])
-def home():
-    status = ""
-    if request.method == 'POST':
-        subject = request.form['subject']
-        body = request.form['body']
-        recipients_raw = request.form['recipients'].split(',')
+# --- Session State Management ---
+if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+if 'is_sending' not in st.session_state: st.session_state.is_sending = False
+if 'current_index' not in st.session_state: st.session_state.current_index = 0
+if 'frozen_job' not in st.session_state: st.session_state.frozen_job = None
+
+if not st.session_state.logged_in:
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
+    if st.button("LOGIN"):
+        if u == "RADHE RADHE" and p == "RADHE RADHE":
+            st.session_state.logged_in = True
+            st.rerun()
+else:
+    st.markdown('<div class="main-card">', unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>📧 Fast Mail Launcher</h2>", unsafe_allow_html=True)
+    
+    # Input Boxes (Inka data bhejte waqt change karne se farak nahi padega)
+    col1, col2 = st.columns(2)
+    with col1: s_name = st.text_input("Sender Name", key="sn")
+    with col2: s_email = st.text_input("Your Gmail", key="se")
+    col3, col4 = st.columns(2)
+    with col3: s_pass = st.text_input("App Password", type="password", key="sp")
+    with col4: subject = st.text_input("Subject", key="sub")
+    col5, col6 = st.columns(2)
+    with col5: body = st.text_area("Message Body", height=150, key="msg")
+    with col6: recipients_raw = st.text_area("Recipients", height=150, key="rec")
+
+    # --- SENDING ENGINE ---
+    if st.session_state.is_sending:
+        st.button("⌛ Sending... (Input boxes are now safe to edit)", disabled=True)
         
-        # Checking if credentials are set
-        if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
-            return render_template_string(HTML_TEMPLATE, status="❌ Error: Email credentials not set in Environment Variables!")
-
+        job = st.session_state.frozen_job
+        total = len(job['r'])
+        
         try:
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-                smtp.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-                for email in recipients_raw:
-                    email = email.strip()
-                    if email:
-                        msg = EmailMessage()
-                        msg['Subject'] = subject
-                        msg['From'] = EMAIL_ADDRESS
-                        msg['To'] = email
-                        msg.set_content(body)
-                        smtp.send_message(msg)
-                status = f"✅ Success! Emails sent to {len(recipients_raw)} recipients."
-        except Exception as e:
-            status = f"❌ Error: {str(e)}"
+            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
+            server.starttls()
+            server.login(job['e'], job['p'])
             
-    return render_template_string(HTML_TEMPLATE, status=status)
+            p_bar = st.progress(st.session_state.current_index / total)
+            status = st.empty()
+            
+            # Loop wahan se shuru hoga jahan pichli baar refresh hua tha
+            for i in range(st.session_state.current_index, total):
+                r_id = job['r'][i]
+                
+                msg = MIMEMultipart()
+                msg['From'] = f"{job['n']} <{job['e']}>"
+                msg['To'] = r_id
+                msg['Subject'] = job['s']
+                msg.attach(MIMEText(job['b'], 'plain'))
+                
+                server.send_message(msg)
+                
+                # Update current index in session_state
+                st.session_state.current_index = i + 1
+                
+                # Update UI
+                p_bar.progress(st.session_state.current_index / total)
+                status.text(f"Sent: {st.session_state.current_index}/{total} -> {r_id}")
+                
+            server.quit()
+            st.session_state.is_sending = False
+            st.session_state.current_index = 0
+            st.session_state.frozen_job = None
+            st.success("✅ Kaam Ho Gaya! Saare mails chale gaye.")
+            st.balloons()
+            time.sleep(2)
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Error: {e}. Session saved, you can try again.")
+            st.session_state.is_sending = False
+            
+    else:
+        btn_col, logout_col = st.columns([0.8, 0.2])
+        with btn_col:
+            if st.button("Send All"):
+                unique_emails = list(dict.fromkeys([e.strip() for e in recipients_raw.replace(',', '\n').split('\n') if e.strip()]))
+                
+                if s_email and s_pass and unique_emails:
+                    # Yahan sab kuch FREEZE ho gaya
+                    st.session_state.frozen_job = {
+                        'n': s_name, 'e': s_email, 'p': s_pass,
+                        's': subject, 'b': body, 'r': unique_emails
+                    }
+                    st.session_state.current_index = 0
+                    st.session_state.is_sending = True
+                    st.rerun()
 
-if __name__ == '__main__':
-    # Port dynamically assigned by hosting provider
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+        with logout_col:
+            if st.button("Logout"):
+                st.session_state.logged_in = False
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
