@@ -3,14 +3,15 @@ import smtplib
 import time
 import random
 import uuid
+import concurrent.futures
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
-# --- Page Setup ---
-st.set_page_config(page_title="Console", layout="wide")
+# --- Page Config ---
+st.set_page_config(page_title="Safe Mailer", layout="wide")
 
-# --- Exact UI Match CSS ---
+# --- UI Styling (As per your Image) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
@@ -35,94 +36,95 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Login Logic ---
+# --- Authentication ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 
 if not st.session_state.auth:
     col_l, col_m, col_r = st.columns([1, 1.5, 1])
     with col_m:
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        if st.button("Unlock"):
+        u = st.text_input("User")
+        p = st.text_input("Pass", type="password")
+        if st.button("Access"):
             if u == "@#2026@#" and p == "@#2026@#":
                 st.session_state.auth = True
                 st.rerun()
 else:
-    # --- Main Dashboard (No Header) ---
+    # --- Main Dashboard ---
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     
-    # Row 1
+    # Same 6 Columns Layout
     c1, c2 = st.columns(2)
     with c1: s_name = st.text_input("", placeholder="Sender Name")
     with c2: s_email = st.text_input("", placeholder="Your Gmail")
     
-    # Row 2
     c3, c4 = st.columns(2)
     with c3: s_pass = st.text_input("", placeholder="App Password", type="password")
     with c4: subject = st.text_input("", placeholder="Email Subject")
     
-    # Row 3 (6-Column grid equivalent)
     c5, c6 = st.columns(2)
     with c5: body = st.text_area("", placeholder="Message Body", height=220)
     with c6: rec_raw = st.text_area("", placeholder="Recipients (comma / new line)", height=220)
 
-    # --- Secure Engine ---
-    def send_one_by_one(target):
+    # --- High-Speed Safe Engine ---
+    def send_engine(target_email):
         try:
-            target = target.strip()
-            if not target: return None
+            target_email = target_email.strip()
+            if not target_email: return None
             
             msg = MIMEMultipart('alternative')
             msg['Subject'] = subject
             msg['From'] = formataddr((s_name, s_email))
-            msg['To'] = target
+            msg['To'] = target_email
             
             # Anti-Spam Professional Headers
             msg['Message-ID'] = make_msgid()
             msg['X-Entity-ID'] = str(uuid.uuid4())
-            msg['List-Unsubscribe'] = f'<mailto:{s_email}>'
-            
             msg.attach(MIMEText(body, 'html'))
 
-            with smtplib.SMTP('smtp.gmail.com', 587, timeout=25) as server:
+            # Fresh session for reliability
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
                 server.starttls()
                 server.login(s_email, s_pass)
                 server.send_message(msg)
             
-            # CRITICAL: Randomized delay for Inbox reputation
-            time.sleep(random.uniform(5.2, 9.8)) 
-            return True
+            # Jitter: Small random gap to mimic human sending
+            time.sleep(random.uniform(1.5, 3.0)) 
+            return True, target_email
         except Exception as e:
-            return str(e)
+            return False, f"{target_email}: {str(e)}"
 
-    # --- Buttons ---
+    # --- Control Buttons ---
     st.write("")
-    b_send, b_out = st.columns(2)
-    with b_send:
-        if st.button("Send All (Safe Mode)"):
+    b_run, b_exit = st.columns(2)
+    
+    with b_run:
+        if st.button("Send All (Turbo Safe)"):
             emails = list(dict.fromkeys([e.strip() for e in rec_raw.replace(',', '\n').split('\n') if e.strip()]))
             if s_email and s_pass and emails:
                 p_bar = st.progress(0)
                 status = st.empty()
-                success = 0
+                success_count = 0
                 
-                # Processing one-by-one is the ONLY way to stay 100% safe
-                for i, email in enumerate(emails):
-                    res = send_one_by_one(email)
-                    if res is True:
-                        success += 1
-                        status.success(f"Inboxed: {email} ({i+1}/{len(emails)})")
-                    else:
-                        status.error(f"Blocked: {email} | Error: {res}")
-                    
-                    p_bar.progress((i + 1) / len(emails))
-                
-                st.balloons()
-                st.write(f"### Final Result: {success} Inboxed Successfully")
-            else:
-                st.error("Fields missing!")
+                # Using 3 workers for speed + safety balance
+                # Threading makes it fast, but low worker count prevents block
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = {executor.submit(send_engine, em): em for em in emails}
+                    for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                        ok, res = future.result()
+                        if ok:
+                            success_count += 1
+                        else:
+                            st.error(res)
+                        
+                        p_bar.progress((i + 1) / len(emails))
+                        status.text(f"🚀 Speed Active: {i+1}/{len(emails)} sent")
 
-    with b_out:
+                st.success(f"Done! {success_count} emails delivered to Inbox.")
+                st.balloons()
+            else:
+                st.error("Missing credentials or recipient list!")
+
+    with b_exit:
         if st.button("Logout"):
             st.session_state.auth = False
             st.rerun()
