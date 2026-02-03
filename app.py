@@ -1,113 +1,133 @@
 import streamlit as st
 import smtplib
 import time
+import random
 import concurrent.futures
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
-# --- Page Config ---
-st.set_page_config(page_title="Radhe Radhe Turbo Mailer", layout="wide")
+# --- Page Setup ---
+st.set_page_config(page_title="Mail Console", layout="wide")
 
-# --- CSS (Exactly like your original) ---
+# --- Custom CSS for Exact Match ---
 st.markdown("""
     <style>
+    /* Background and Card */
     .stApp { background-color: #f0f2f6; }
     .main-card {
-        background-color: white; padding: 30px; border-radius: 15px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
-        max-width: 950px; margin: auto; border: 1px solid #e0e4e9;
+        background-color: white; padding: 40px; border-radius: 20px;
+        box-shadow: 0px 10px 40px rgba(0,0,0,0.1);
+        max-width: 1000px; margin: 50px auto; border: 1px solid #e0e4e9;
     }
-    input, textarea { color: #000000 !important; font-weight: 500 !important; background-color: #ffffff !important; }
-    label p { color: #333333 !important; font-weight: bold !important; }
-    div.stButton > button:first-child {
-        width: 100%; height: 70px; background-color: #4285F4 !important;
-        color: white !important; font-size: 20px !important; font-weight: bold;
-        border-radius: 10px; border: none;
+    
+    /* Input Fields Styling */
+    input, textarea { 
+        color: #555 !important; 
+        background-color: #ffffff !important; 
+        border: 1px solid #dcdcdc !important;
+        border-radius: 10px !important;
+        padding: 12px !important;
     }
+    
+    /* Button Styling */
+    div.stButton > button {
+        width: 100%; height: 55px; font-size: 18px !important; font-weight: 500;
+        border-radius: 12px; border: none; transition: 0.3s;
+    }
+    .send-btn button { background-color: #4A90E2 !important; color: white !important; }
+    .logout-btn button { background-color: #4A90E2 !important; color: white !important; }
+    
+    /* Hide Header/Footer */
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- Authentication ---
-if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+# --- Auth Logic ---
+if 'auth' not in st.session_state: st.session_state.auth = False
 
-if not st.session_state.logged_in:
-    u = st.text_input("Username")
-    p = st.text_input("Password", type="password")
-    if st.button("LOGIN"):
-        if u == "@#2026@#" and p == "@#2026@#":
-            st.session_state.logged_in = True
-            st.rerun()
-        else:
-            st.error("Invalid Credentials")
+if not st.session_state.auth:
+    col_l, col_m, col_r = st.columns([1, 2, 1])
+    with col_m:
+        st.write("### Login Required")
+        u = st.text_input("User")
+        p = st.text_input("Pass", type="password")
+        if st.button("Access"):
+            if u == "@#2026@#" and p == "@#2026@#":
+                st.session_state.auth = True
+                st.rerun()
 else:
+    # --- Main UI ---
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center;'>📧 Fast Mail Launcher Pro</h2>", unsafe_allow_html=True)
     
-    # --- UI with 6 Columns (Exactly as requested) ---
-    col1, col2 = st.columns(2)
-    with col1: s_name = st.text_input("Sender Name", key="sn")
-    with col2: s_email = st.text_input("Your Gmail", key="se")
+    # 6 Columns Layout (Same as Image)
+    c1, c2 = st.columns(2)
+    with c1: s_name = st.text_input("", placeholder="Sender Name")
+    with c2: s_email = st.text_input("", placeholder="Your Gmail")
     
-    col3, col4 = st.columns(2)
-    with col3: s_pass = st.text_input("App Password", type="password", key="sp")
-    with col4: subject = st.text_input("Subject", key="sub")
+    c3, c4 = st.columns(2)
+    with c3: s_pass = st.text_input("", placeholder="App Password", type="password")
+    with c4: subject = st.text_input("", placeholder="Email Subject")
     
-    col5, col6 = st.columns(2)
-    with col5: body = st.text_area("Message Body", height=150, key="msg")
-    with col6: recipients_raw = st.text_area("Recipients", height=150, key="rec")
+    c5, c6 = st.columns(2)
+    with c5: body = st.text_area("", placeholder="Message Body", height=200)
+    with c6: recipients_raw = st.text_area("", placeholder="Recipients (comma / new line)", height=200)
 
-    # --- Worker Function (Anti-Spam Logic) ---
-    def send_mail_task(target_email):
+    # --- Secure Sending Engine ---
+    def send_task(target):
         try:
             msg = MIMEMultipart()
             msg['Subject'] = subject
             msg['From'] = formataddr((s_name, s_email))
-            msg['To'] = target_email
-            msg['Message-ID'] = make_msgid() # Avoids spam filters
-            msg['X-Priority'] = '3'
-            msg.attach(MIMEText(body, 'html')) # HTML for better delivery
+            msg['To'] = target
+            msg['Message-ID'] = make_msgid() # Anti-spam unique ID
+            msg.attach(MIMEText(body, 'html'))
 
-            with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=12) as server:
                 server.starttls()
                 server.login(s_email, s_pass)
                 server.send_message(msg)
-            return True, target_email
+            
+            # Smart Delay to avoid Gmail detection
+            time.sleep(random.uniform(0.3, 0.8)) 
+            return True
         except Exception as e:
-            return False, f"{target_email}: {str(e)}"
+            return str(e)
 
-    # --- Sending Process ---
-    if st.button("Send All (Turbo Mode)"):
+    # --- Buttons Row ---
+    st.write("") # Spacer
+    b1, b2 = st.columns(2)
+    with b1:
+        st.markdown('<div class="send-btn">', unsafe_allow_html=True)
+        send_clicked = st.button("Send All")
+        st.markdown('</div>', unsafe_allow_html=True)
+    with b2:
+        st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
+        if st.button("Logout"):
+            st.session_state.auth = False
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if send_clicked:
         email_list = list(dict.fromkeys([e.strip() for e in recipients_raw.replace(',', '\n').split('\n') if e.strip()]))
         
         if s_email and s_pass and email_list:
-            progress_bar = st.progress(0)
-            status_area = st.empty()
-            success_count = 0
+            p_bar = st.progress(0)
+            status = st.empty()
+            success = 0
             
-            # Using ThreadPoolExecutor for real speed
-            # Max_workers=5 is safe for Gmail to prevent IP block
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
-                futures = {executor.submit(send_mail_task, email): email for email in email_list}
+            # Threading for high speed (max 4 for safety)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                results = list(executor.map(send_task, email_list))
                 
-                for i, future in enumerate(concurrent.futures.as_completed(futures)):
-                    success, result = future.result()
-                    if success:
-                        success_count += 1
-                    else:
-                        st.error(f"Failed: {result}")
-                    
-                    # Update Progress
-                    progress = (i + 1) / len(email_list)
-                    progress_bar.progress(progress)
-                    status_area.text(f"🚀 Speed: Active | Sent: {i+1}/{len(email_list)}")
+                for i, res in enumerate(results):
+                    if res is True: success += 1
+                    p_bar.progress((i + 1) / len(email_list))
+                    status.text(f"Processing: {i+1}/{len(email_list)}")
 
-            st.success(f"✅ Mission Accomplished! {success_count} emails delivered.")
-            st.balloons()
+            st.success(f"Sent: {success} | Failed: {len(email_list) - success}")
         else:
-            st.warning("Please fill all details and recipient list.")
+            st.warning("All fields are required!")
 
-    if st.button("Logout"):
-        st.session_state.logged_in = False
-        st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
