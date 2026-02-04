@@ -1,2 +1,2 @@
 streamlit
-# Library for high-performance web dashboard and SMTP handling
+# For high-speed UI and asynchronous SMTP operations
