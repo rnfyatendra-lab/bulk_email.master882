@@ -1,2 +1,2 @@
 streamlit
-# For high-speed UI and asynchronous SMTP operations
+# Library for high-performance web interface and parallel mailing
