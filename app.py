@@ -1,13 +1,16 @@
 import streamlit as st
 import smtplib
 import time
+import random
+import concurrent.futures
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr, make_msgid
 
 # --- Page Config ---
-st.set_page_config(page_title="Radhe Radhe Mailer", layout="wide")
+st.set_page_config(page_title="Radhe Radhe Mailer Pro", layout="wide")
 
-# --- CSS (Visibility & Design) ---
+# --- CSS (Design preserved and enhanced) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
@@ -26,12 +29,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Session State Management ---
+# --- Session State ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
-if 'is_sending' not in st.session_state: st.session_state.is_sending = False
-if 'current_index' not in st.session_state: st.session_state.current_index = 0
-if 'frozen_job' not in st.session_state: st.session_state.frozen_job = None
 
+# --- Login Logic ---
 if not st.session_state.logged_in:
     u = st.text_input("Username")
     p = st.text_input("Password", type="password")
@@ -41,84 +42,76 @@ if not st.session_state.logged_in:
             st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center;'>📧 Fast Mail Launcher</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>📧 Fast & Safe Mail Launcher</h2>", unsafe_allow_html=True)
     
-    # Input Boxes (Inka data bhejte waqt change karne se farak nahi padega)
     col1, col2 = st.columns(2)
-    with col1: s_name = st.text_input("Sender Name", key="sn")
+    with col1: s_name = st.text_input("Sender Name (Display)", key="sn")
     with col2: s_email = st.text_input("Your Gmail", key="se")
+    
     col3, col4 = st.columns(2)
     with col3: s_pass = st.text_input("App Password", type="password", key="sp")
     with col4: subject = st.text_input("Subject", key="sub")
+    
     col5, col6 = st.columns(2)
     with col5: body = st.text_area("Message Body", height=150, key="msg")
-    with col6: recipients_raw = st.text_area("Recipients", height=150, key="rec")
+    with col6: recipients_raw = st.text_area("Recipients (Comma or New Line)", height=150, key="rec")
 
-    # --- SENDING ENGINE ---
-    if st.session_state.is_sending:
-        st.button("⌛ Sending... (Input boxes are now safe to edit)", disabled=True)
-        
-        job = st.session_state.frozen_job
-        total = len(job['r'])
-        
+    # --- Secure Sending Engine ---
+    def send_mail_worker(target_email):
         try:
-            server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
-            server.starttls()
-            server.login(job['e'], job['p'])
-            
-            p_bar = st.progress(st.session_state.current_index / total)
-            status = st.empty()
-            
-            # Loop wahan se shuru hoga jahan pichli baar refresh hua tha
-            for i in range(st.session_state.current_index, total):
-                r_id = job['r'][i]
-                
-                msg = MIMEMultipart()
-                msg['From'] = f"{job['n']} <{job['e']}>"
-                msg['To'] = r_id
-                msg['Subject'] = job['s']
-                msg.attach(MIMEText(job['b'], 'plain'))
-                
-                server.send_message(msg)
-                
-                # Update current index in session_state
-                st.session_state.current_index = i + 1
-                
-                # Update UI
-                p_bar.progress(st.session_state.current_index / total)
-                status.text(f"Sent: {st.session_state.current_index}/{total} -> {r_id}")
-                
-            server.quit()
-            st.session_state.is_sending = False
-            st.session_state.current_index = 0
-            st.session_state.frozen_job = None
-            st.success("✅ Kaam Ho Gaya! Saare mails chale gaye.")
-            st.balloons()
-            time.sleep(2)
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"Error: {e}. Session saved, you can try again.")
-            st.session_state.is_sending = False
-            
-    else:
-        btn_col, logout_col = st.columns([0.8, 0.2])
-        with btn_col:
-            if st.button("Send All"):
-                unique_emails = list(dict.fromkeys([e.strip() for e in recipients_raw.replace(',', '\n').split('\n') if e.strip()]))
-                
-                if s_email and s_pass and unique_emails:
-                    # Yahan sab kuch FREEZE ho gaya
-                    st.session_state.frozen_job = {
-                        'n': s_name, 'e': s_email, 'p': s_pass,
-                        's': subject, 'b': body, 'r': unique_emails
-                    }
-                    st.session_state.current_index = 0
-                    st.session_state.is_sending = True
-                    st.rerun()
+            msg = MIMEMultipart()
+            msg['Subject'] = subject
+            msg['From'] = formataddr((s_name, s_email)) # Safe Header
+            msg['To'] = target_email
+            msg['Message-ID'] = make_msgid() # Unique ID to avoid spam filters
+            msg.attach(MIMEText(body, 'plain'))
 
-        with logout_col:
-            if st.button("Logout"):
-                st.session_state.logged_in = False
-                st.rerun()
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
+                server.starttls()
+                server.login(s_email, s_pass)
+                server.send_message(msg)
+            
+            # Artificial intelligence delay to mimic human behavior
+            time.sleep(random.uniform(1.0, 2.5)) 
+            return True, target_email
+        except Exception as e:
+            return False, f"{target_email}: {str(e)}"
+
+    # --- Action Buttons ---
+    btn_col, logout_col = st.columns([0.8, 0.2])
+    
+    with btn_col:
+        if st.button("Launch Turbo Sending"):
+            email_list = list(dict.fromkeys([e.strip() for e in recipients_raw.replace(',', '\n').split('\n') if e.strip()]))
+            
+            if s_email and s_pass and email_list:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                success_count = 0
+                
+                # Using ThreadPoolExecutor for speed (Max 3 workers for Gmail safety)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                    futures = {executor.submit(send_mail_worker, email): email for email in email_list}
+                    
+                    for i, future in enumerate(concurrent.futures.as_completed(futures)):
+                        success, result = future.result()
+                        if success:
+                            success_count += 1
+                        else:
+                            st.error(f"Error: {result}")
+                        
+                        # Update Progress
+                        progress = (i + 1) / len(email_list)
+                        progress_bar.progress(progress)
+                        status_text.text(f"Processed: {i+1}/{len(email_list)} | Successful: {success_count}")
+
+                st.success(f"✅ Kaam Ho Gaya! {success_count} mails successfully inbox huye.")
+                st.balloons()
+            else:
+                st.warning("Please fill all fields and add recipients.")
+
+    with logout_col:
+        if st.button("Logout"):
+            st.session_state.logged_in = False
+            st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
