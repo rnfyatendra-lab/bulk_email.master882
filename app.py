@@ -8,10 +8,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
-# --- Page Config ---
-st.set_page_config(page_title="Console", layout="wide")
+# --- Page Config & UI Styling ---
+st.set_page_config(page_title="Safe Mailer Console", layout="wide")
 
-# --- UI Styling (Clean & Pro) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
@@ -35,33 +34,40 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Email Validator Logic ---
-def is_valid_email(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
-    return re.match(pattern, email) is not None
+# --- Anti-Spam Logic: Related English Words ---
+def hide_spam_words(text):
+    mapping = {
+        r"free": "complimentary", r"win": "attain", r"money": "funds",
+        r"cash": "revenue", r"urgent": "priority", r"offer": "opportunity",
+        r"buy": "acquire", r"gift": "reward", r"winner": "achiever"
+    }
+    for pattern, replacement in mapping.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return text.replace('\n', '<br>')
 
-# --- Session State ---
+# --- Session State Management ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 if 'sending' not in st.session_state: st.session_state.sending = False
-if 'logs' not in st.session_state: st.session_state.logs = {}
+if 'usage_logs' not in st.session_state: st.session_state.usage_logs = {}
 
-# --- Login ---
+# --- Login System ---
 if not st.session_state.auth:
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
-        st.write("### 🔐 Secure Login")
+        st.write("### 🔐 Login")
         u = st.text_input("User")
         p = st.text_input("Pass", type="password")
-        if st.button("Unlock"):
+        if st.button("Unlock System"):
             if u == "@#2026@#" and p == "@#2026@#":
                 st.session_state.auth = True
                 st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>📧 Secure Turbo Mailer</h3>", unsafe_allow_html=True)
     
-    # Input Grid
+    # 6-Column Input Grid
     col1, col2 = st.columns(2)
-    with col1: s_name = st.text_input("Sender Name (Optional)", key="sn")
+    with col1: s_name = st.text_input("Sender Name (Jo aap fill karenge)", key="sn")
     with col2: s_email = st.text_input("Your Gmail", key="se")
     
     col3, col4 = st.columns(2)
@@ -69,92 +75,92 @@ else:
     with col4: subject = st.text_input("Email Subject", key="sub")
     
     col5, col6 = st.columns(2)
-    with col5: body = st.text_area("Message Body", height=200, key="msg")
-    with col6: rec_raw = st.text_area("Recipients (One per line)", height=200, key="rec")
+    with col5: body_input = st.text_area("Message Body", height=200, key="msg")
+    with col6: rec_raw = st.text_area("Recipients (one per line)", height=200, key="rec")
 
-    # --- Worker Function ---
-    def worker(target):
+    # --- SMTP Worker Engine ---
+    def send_mail_worker(target):
         try:
+            safe_body = hide_spam_words(body_input)
             msg = MIMEMultipart()
             msg['Subject'] = subject
             msg['From'] = formataddr((s_name, s_email))
             msg['To'] = target
             msg['Message-ID'] = make_msgid()
             
-            # Anti-Spam Tag
-            h_tag = f"<div style='display:none;'>ID-{uuid.uuid4()}</div>"
-            msg.attach(MIMEText(f"<html><body>{body.replace(chr(10), '<br>')}{h_tag}</body></html>", 'html'))
+            # Unique ID to bypass filters
+            h_id = f"<div style='display:none;'>Ref-{uuid.uuid4()}</div>"
+            msg.attach(MIMEText(f"<html><body>{safe_body}{h_id}</body></html>", 'html'))
 
-            with smtplib.SMTP('smtp.gmail.com', 587, timeout=12) as server:
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
                 server.starttls()
                 server.login(s_email, s_pass)
                 server.send_message(msg)
             
-            st.session_state.logs[s_email].append(time.time())
+            st.session_state.usage_logs[s_email].append(time.time())
             return True, target
+        except smtplib.SMTPAuthenticationError:
+            return "AUTH_ERROR", "App Password wrong"
         except Exception as e:
-            # Wrong password ya connection error yahan catch hoga
             return False, str(e)
 
-    # --- Buttons ---
+    # --- Button Control ---
     st.write("")
     if st.session_state.sending:
-        st.button("⌛ Launching Batches... (Locked)", disabled=True)
+        st.button("⌛ Sending Active... (System Locked)", disabled=True)
     else:
         b1, b2 = st.columns(2)
         with b1:
             if st.button("Send All"):
-                # 1. Cleaning & Filtering Valid Emails
-                all_emails = [e.strip() for e in rec_raw.replace(',', '\n').split('\n') if e.strip()]
-                valid_emails = [e for e in all_emails if is_valid_email(e)]
-                skipped = len(all_emails) - len(valid_emails)
+                emails = [e.strip() for e in rec_raw.replace(',', '\n').split('\n') if e.strip()]
                 
-                # 2. Limit Check
+                # Hourly Limit Check (28/hr)
                 now = time.time()
-                if s_email not in st.session_state.logs: st.session_state.logs[s_email] = []
-                st.session_state.logs[s_email] = [t for t in st.session_state.logs[s_email] if now - t < 3600]
+                if s_email not in st.session_state.usage_logs: st.session_state.usage_logs[s_email] = []
+                st.session_state.usage_logs[s_email] = [t for t in st.session_state.usage_logs[s_email] if now - t < 3600]
                 
-                if len(st.session_state.logs[s_email]) >= 28:
+                if len(st.session_state.usage_logs[s_email]) >= 28:
                     st.error(f"❌ Limit Full (28/hr) for {s_email} ❌")
-                elif not valid_emails:
-                    st.warning(f"No valid emails found! (Skipped: {skipped})")
+                elif not s_email or not s_pass or not emails:
+                    st.warning("Details fill kijiye!")
                 else:
-                    if skipped > 0: st.toast(f"Skipped {skipped} invalid emails", icon="⚠️")
                     st.session_state.sending = True
-                    st.session_state.targets = valid_emails # Store only valid ones
+                    st.session_state.target_list = emails
                     st.rerun()
         with b2:
             if st.button("Logout"):
                 st.session_state.auth = False
                 st.rerun()
 
-    # --- Turbo Parallel Execution ---
+    # --- Execution Engine ---
     if st.session_state.sending:
-        targets = st.session_state.targets
+        targets = st.session_state.target_list
         p_bar = st.progress(0)
-        status = st.empty()
+        counter_text = st.empty()
         success = 0
         
         
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
-            futures = {ex.submit(worker, em): em for em in targets}
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(send_mail_worker, em): em for em in targets}
             for i, f in enumerate(concurrent.futures.as_completed(futures)):
-                ok, res = f.result()
-                if ok:
-                    success += 1
-                    p_bar.progress((i + 1) / len(targets))
-                    status.info(f"⚡ Progress: {i+1}/{len(targets)} | Successfully Inboxed: {success}")
-                else:
-                    # Authentication Error/Wrong Password Catch
-                    st.error(f"🛑 CRITICAL ERROR: {res}")
-                    st.session_state.sending = False # RESET BUTTON IMMEDIATELY
+                res, info = f.result()
+                
+                if res == "AUTH_ERROR":
+                    st.error("❌ App Password wrong! ❌")
+                    st.session_state.sending = False # Reset Button
                     st.stop()
-            
-            st.session_state.sending = False
-            st.success(f"Task Finished! Total {success} mails delivered.")
-            st.balloons()
-            time.sleep(2)
-            st.rerun()
+                
+                if res is True: success += 1
+                
+                # Real-time Counter
+                p_bar.progress((i + 1) / len(targets))
+                counter_text.info(f"📊 Status: {i+1}/{len(targets)} | Inboxed: {success}")
+
+        st.session_state.sending = False
+        st.success(f"Task Done! {success} Mails Sent.")
+        st.balloons()
+        time.sleep(2)
+        st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
