@@ -1,1 +1,2 @@
 streamlit
+# Required for web interface and background thread management
