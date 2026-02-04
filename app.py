@@ -10,150 +10,145 @@ from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
 # --- Page Config ---
-st.set_page_config(page_title="Personalized Turbo Mailer", layout="wide")
+st.set_page_config(page_title="Console", layout="wide")
 
-# --- UI Styling ---
+# --- UI Styling (Image 1 Style) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
     .main-card {
-        background-color: white; padding: 35px; border-radius: 15px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.1);
-        max-width: 950px; margin: auto; border: 1px solid #e0e4e9;
+        background-color: white; padding: 40px; border-radius: 20px;
+        box-shadow: 0px 10px 40px rgba(0,0,0,0.1);
+        max-width: 1000px; margin: auto; margin-top: 50px; border: 1px solid #e0e4e9;
     }
-    input, textarea { color: #000 !important; font-weight: 500 !important; background-color: #fff !important; border: 1px solid #ccc !important;}
+    input, textarea { 
+        color: #000 !important; font-weight: 500 !important; 
+        background-color: #fff !important; border: 1px solid #dcdcdc !important;
+        border-radius: 10px !important; padding: 15px !important;
+    }
     div.stButton > button {
-        width: 100%; height: 70px; background-color: #4285F4 !important;
-        color: white !important; font-size: 20px !important; font-weight: bold;
+        width: 100%; height: 65px; background-color: #4A90E2 !important;
+        color: white !important; font-size: 18px !important; font-weight: bold;
         border-radius: 12px; border: none;
     }
     header, footer {visibility: hidden;}
+    [data-testid="stHeader"] {display: none;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- Smart Word Mapper (Spam to Professional English) ---
-def smart_sanitizer(text):
-    replacements = {
-        r"free": "complimentary",
-        r"win": "achieve",
-        r"winner": "champion",
-        r"money": "funds",
-        r"offer": "opportunity",
-        r"urgent": "critical",
-        r"click here": "use the link",
-        r"buy": "secure",
-        r"cash": "revenue"
+# --- Anti-Spam Synonym Fixer ---
+def spam_cleaner(text):
+    words = {
+        r"free": "complimentary", r"win": "get", r"money": "funds",
+        r"urgent": "important", r"click": "proceed", r"offer": "proposal"
     }
-    for pattern, rep in replacements.items():
-        text = re.sub(pattern, rep, text, flags=re.IGNORECASE)
+    for p, r in words.items():
+        text = re.sub(p, r, text, flags=re.IGNORECASE)
     return text
 
-# --- Session State ---
+# --- Session States ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 if 'sending' not in st.session_state: st.session_state.sending = False
-if 'tracker' not in st.session_state: st.session_state.tracker = {}
+if 'logs' not in st.session_state: st.session_state.logs = {}
 
-# --- Login Logic ---
+# --- Login ---
 if not st.session_state.auth:
-    c1, c2, c3 = st.columns([1, 1.5, 1])
-    with c2:
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        if st.button("UNLOCK"):
+    col_l, col_m, col_r = st.columns([1, 1.5, 1])
+    with col_m:
+        st.write("### Login")
+        u = st.text_input("User")
+        p = st.text_input("Pass", type="password")
+        if st.button("Access"):
             if u == "@#2026@#" and p == "@#2026@#":
                 st.session_state.auth = True
                 st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     
-    # 6 Column Grid
+    # 6-Column Layout
     c1, c2 = st.columns(2)
-    with c1: s_name = st.text_input("Sender Name", placeholder="e.g. Rahul Sharma")
-    with c2: s_email = st.text_input("Your Gmail", placeholder="example@gmail.com")
+    with c1: s_name = st.text_input("", placeholder="Sender Name (Optional)")
+    with c2: s_email = st.text_input("", placeholder="Your Gmail")
     
     c3, c4 = st.columns(2)
-    with c3: s_pass = st.text_input("App Password", type="password")
-    with c4: subject_template = st.text_input("Subject", placeholder="Hello {name}, Check this!")
+    with c3: s_pass = st.text_input("", placeholder="App Password", type="password")
+    with c4: subject = st.text_input("", placeholder="Email Subject")
     
     c5, c6 = st.columns(2)
-    with c5: body_input = st.text_area("Template (Lines Preserved)", height=220)
-    with c6: rec_raw = st.text_area("Recipients (email,name)", height=220, placeholder="raj@gmail.com,Raj\njoy@gmail.com,Joy")
+    with c5: body_t = st.text_area("", placeholder="Message Body", height=220)
+    with c6: rec_raw = st.text_area("", placeholder="Recipients (one email per line)", height=220)
 
-    # --- Turbo Engine ---
-    def personalized_engine(data):
-        target_email, target_name = data
+    # --- Worker Engine ---
+    def fast_engine(target_e):
         try:
-            # Customizing Subject & Body
-            personal_subject = subject_template.replace("{name}", target_name)
-            safe_body = smart_sanitizer(body_input).replace('\n', '<br>')
+            target_e = target_e.strip()
+            p_body = spam_cleaner(body_t).replace('\n', '<br>')
             
             msg = MIMEMultipart()
-            msg['Subject'] = personal_subject
-            msg['From'] = formataddr((s_name, s_email))
-            msg['To'] = target_email
+            msg['Subject'] = subject
+            # display name blank rakha hai taaki sirf email ID dikhe
+            msg['From'] = formataddr(("", s_email)) 
+            msg['To'] = target_e
             msg['Message-ID'] = make_msgid()
             
-            # Invisible uniqueness for Gmail AI
-            hidden_tag = f"<p style='color:transparent;font-size:0;'>ID:{uuid.uuid4()}</p>"
-            msg.attach(MIMEText(f"<html><body>{safe_body}{hidden_tag}</body></html>", 'html'))
+            h_tag = f"<div style='display:none;'>Ref-{uuid.uuid4()}</div>"
+            msg.attach(MIMEText(f"<html><body>{p_body}{h_tag}</body></html>", 'html'))
 
-            with smtplib.SMTP('smtp.gmail.com', 587, timeout=12) as server:
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
                 server.starttls()
                 server.login(s_email, s_pass)
                 server.send_message(msg)
             
-            st.session_state.tracker[s_email].append(time.time())
-            return True, target_email
+            st.session_state.logs[s_email].append(time.time())
+            return True, target_e
         except Exception as e:
             return False, str(e)
 
-    # --- Control Row ---
+    # --- Buttons ---
     st.write("")
     if st.session_state.sending:
-        st.button("⌛ Launching Parallel Batches... (Button Locked)", disabled=True)
+        st.button("⌛ Sending... System Locked", disabled=True)
     else:
-        btn_send, btn_out = st.columns([0.8, 0.2])
-        with btn_send:
+        b1, b2 = st.columns(2)
+        with b1:
             if st.button("Send All"):
-                # Parsing: "email,name"
-                raw_list = [line.split(',') for line in rec_raw.split('\n') if ',' in line]
+                # Sirf emails extract kar raha hai (no comma/name needed)
+                email_list = [l.strip() for l in rec_raw.replace(',', '\n').split('\n') if l.strip()]
                 
                 now = time.time()
-                if s_email not in st.session_state.tracker: st.session_state.tracker[s_email] = []
-                st.session_state.tracker[s_email] = [t for t in st.session_state.tracker[s_email] if now - t < 3600]
+                if s_email not in st.session_state.logs: st.session_state.logs[s_email] = []
+                st.session_state.logs[s_email] = [t for t in st.session_state.logs[s_email] if now-t < 3600]
                 
-                if len(st.session_state.tracker[s_email]) >= 28:
-                    st.error(f"❌ Limit Reached (28/hr) for {s_email} ❌")
-                elif not raw_list:
-                    st.warning("Please use format: email,name")
+                if len(st.session_state.logs[s_email]) >= 28:
+                    st.error("❌ Limit reached (28/hr). Change ID. ❌")
+                elif not email_list:
+                    st.warning("⚠️ Please enter recipient emails!")
                 else:
                     st.session_state.sending = True
                     st.rerun()
-        with btn_out:
+        with b2:
             if st.button("Logout"):
                 st.session_state.auth = False
                 st.rerun()
 
-    # --- Execution Logic ---
+    # --- Parallel Execution ---
     if st.session_state.sending:
-        data_list = [line.split(',') for line in rec_raw.split('\n') if ',' in line]
+        email_list = [l.strip() for l in rec_raw.replace(',', '\n').split('\n') if l.strip()]
         p_bar = st.progress(0)
-        status_text = st.empty()
+        status = st.empty()
         success = 0
         
-        # 3 Parallel Workers for Turbo Speed
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(personalized_engine, d): d for d in data_list}
-            for i, future in enumerate(concurrent.futures.as_completed(futures)):
-                if len(st.session_state.tracker[s_email]) >= 28: break
-                
-                ok, res = future.result()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as ex:
+            futures = {ex.submit(fast_engine, em): em for em in email_list}
+            for i, f in enumerate(concurrent.futures.as_completed(futures)):
+                if len(st.session_state.logs[s_email]) >= 28: break
+                ok, res = f.result()
                 if ok: success += 1
-                p_bar.progress((i + 1) / len(data_list))
-                status_text.info(f"🚀 Sent: {i+1}/{len(data_list)} | Successful: {success}")
+                p_bar.progress((i+1)/len(email_list))
+                status.info(f"🚀 Sent: {i+1}/{len(email_list)} | Success: {success}")
 
         st.session_state.sending = False
-        st.success(f"Mission Done! {success} Inboxed.")
+        st.success(f"Mission Complete! {success} Mails Sent.")
         st.balloons()
         time.sleep(2)
         st.rerun()
