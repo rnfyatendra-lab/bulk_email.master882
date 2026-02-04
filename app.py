@@ -2,92 +2,87 @@ import streamlit as st
 import smtplib
 import time
 import concurrent.futures
-import re
 import uuid
 import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
-# --- Page Setup ---
-st.set_page_config(page_title="Safe Console", layout="wide")
+# --- Page Config ---
+st.set_page_config(page_title="Console", layout="wide")
 
+# --- Professional UI ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
+    .stApp { background-color: #f4f7f6; }
     .main-card {
         background-color: white; padding: 30px; border-radius: 12px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-        max-width: 950px; margin: auto; border: 1px solid #ddd;
+        box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
+        max-width: 950px; margin: auto; border: 1px solid #e1e4e8;
     }
     div.stButton > button { width: 100%; height: 60px; font-weight: bold; border-radius: 8px; }
-    .send-btn button { background-color: #1a73e8 !important; color: white !important; font-size: 18px !important; }
-    .logout-btn button { background-color: #dc3545 !important; color: white !important; }
+    .send-btn button { background-color: #1a73e8 !important; color: white !important; }
+    .logout-btn button { background-color: #f1f3f4 !important; color: #3c4043 !important; border: 1px solid #dadce0 !important; }
     header, footer {visibility: hidden;}
     [data-testid="stHeader"] {display: none;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- Real Inbox Logic (Spam Bypass) ---
-def get_inbox_safe_html(text):
-    # Dynamic word variation (Pattern break)
-    variations = [
-        f"<p>{text.replace('\n', '<br>')}</p>",
-        f"<div>{text.replace('\n', '<br>')}</div>",
-        f"<span>{text.replace('\n', '<br>')}</span>"
-    ]
-    main_content = random.choice(variations)
-    
-    # Invisible unique tracking signature (Inbox Booster)
-    unique_id = f"<div style='display:none;font-size:0px;'>{random.random()}</div>"
-    
+# --- High Inbox Delivery Logic ---
+def create_pro_email_body(content):
+    # Invisible unique tracking ID to bypass bulk filters
+    tracking_id = f""
     return f"""
     <html>
-        <head><style>body {{font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333;}}</style></head>
+        <head>
+            <style>
+                body {{ font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; line-height: 1.6; color: #333333; }}
+                .content {{ padding: 20px; }}
+            </style>
+        </head>
         <body>
-            {main_content}
-            {unique_id}
+            <div class="content">
+                {content.replace('\n', '<br>')}
+            </div>
+            {tracking_id}
         </body>
     </html>
     """
 
-# --- SMTP Worker (High Trust Mode) ---
-def send_inbox_mail(recipient, job):
+# --- Parallel Worker ---
+def send_engine(target, job):
     try:
         msg = MIMEMultipart('alternative')
-        msg['Subject'] = f"{job['s']} {random.randint(100, 999)}" # Random subject suffix
+        msg['Subject'] = job['s']
         msg['From'] = formataddr((job['n'], job['e']))
-        msg['To'] = recipient
+        msg['To'] = target
         msg['Message-ID'] = make_msgid(domain='gmail.com')
         
-        # Professional Headers for Trust
+        # Professional Headers to bypass Spam
         msg['X-Mailer'] = "Microsoft Outlook 16.0"
-        msg['X-Priority'] = '3 (Normal)'
-        msg['Importance'] = 'Normal'
         msg['List-Unsubscribe'] = f"<mailto:{job['e']}?subject=unsubscribe>"
         
-        msg.attach(MIMEText(get_inbox_safe_html(job['b']), 'html'))
+        # Adding HTML for better Inbox placement
+        msg.attach(MIMEText(create_pro_email_body(job['b']), 'html'))
 
         with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
             server.starttls()
             server.login(job['e'], job['p'])
-            # Human-like delay
-            time.sleep(random.uniform(0.5, 2.0))
+            # Artificial human delay
+            time.sleep(random.uniform(0.3, 1.2))
             server.send_message(msg)
         return True
     except:
         return False
 
-# --- Session State ---
+# --- Authentication & Session ---
 if 'auth' not in st.session_state: st.session_state.auth = False
-if 'is_sending' not in st.session_state: st.session_state.is_sending = False
-if 'job_data' not in st.session_state: st.session_state.job_data = None
+if 'busy' not in st.session_state: st.session_state.busy = False
+if 'job' not in st.session_state: st.session_state.job = None
 
-# --- UI ---
 if not st.session_state.auth:
     _, col, _ = st.columns([1, 1, 1])
     with col:
-        st.write("### 🔐 Secure Login")
         u = st.text_input("User")
         p = st.text_input("Pass", type="password")
         if st.button("LOGIN"):
@@ -97,37 +92,39 @@ if not st.session_state.auth:
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     
+    # UI Inputs
     c1, c2 = st.columns(2)
-    with c1: name = st.text_input("Sender Name", key="n")
-    with c2: email = st.text_input("Gmail ID", key="e")
+    with c1: name_ui = st.text_input("Sender Name", key="name_box")
+    with c2: email_ui = st.text_input("Gmail ID", key="email_box")
     
     c3, c4 = st.columns(2)
-    with c3: app_pass = st.text_input("App Password", type="password", key="p")
-    with c4: sub = st.text_input("Subject", key="s")
+    with c3: pass_ui = st.text_input("App Password", type="password", key="pass_box")
+    with c4: sub_ui = st.text_input("Subject", key="sub_box")
     
     c5, c6 = st.columns(2)
-    with c5: msg_body = st.text_area("Body", height=150, key="b")
-    with c6: rec_list = st.text_area("Recipients", height=150, key="r")
+    with c5: body_ui = st.text_area("Body", height=150, key="body_box")
+    with c6: list_ui = st.text_area("Recipients", height=150, key="rec_box")
 
-    if st.session_state.is_sending:
-        st.info(f"🚀 Sending from: {st.session_state.job_data['e']} (Processing...)")
-        job = st.session_state.job_data
+    # --- Processing Engine ---
+    if st.session_state.busy:
+        st.info(f"🚀 Processing Batch: {st.session_state.job['e']}")
+        job = st.session_state.job
         p_bar = st.progress(0)
         success = 0
         
         
 
-        # Parallel Multi-threading (3 Workers)
+        # Parallel Threads (3 workers for safety)
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(send_inbox_mail, em, job): em for em in job['r']}
+            futures = {executor.submit(send_engine, em, job): em for em in job['r']}
             for i, f in enumerate(concurrent.futures.as_completed(futures)):
                 if f.result() is True: success += 1
                 p_bar.progress((i + 1) / len(job['r']))
         
-        st.session_state.is_sending = False
-        st.session_state.job_data = None
-        st.success(f"Final Report: {success} delivered to Inbox.")
-        time.sleep(2)
+        st.session_state.busy = False
+        st.session_state.job = None
+        st.success(f"Task Finished. {success} Mails Inboxed.")
+        time.sleep(1)
         st.rerun()
             
     else:
@@ -136,10 +133,14 @@ else:
         with col_s:
             st.markdown('<div class="send-btn">', unsafe_allow_html=True)
             if st.button("Send All"):
-                targets = list(dict.fromkeys([x.strip() for x in rec_list.replace(',', '\n').split('\n') if x.strip()]))
-                if email and app_pass and targets:
-                    st.session_state.job_data = {'n': name, 'e': email, 'p': app_pass, 's': sub, 'b': msg_body, 'r': targets}
-                    st.session_state.is_sending = True
+                targets = list(dict.fromkeys([x.strip() for x in list_ui.replace(',', '\n').split('\n') if x.strip()]))
+                if email_ui and pass_ui and targets:
+                    # SNAPSHOT: Sab details yahan lock ho gayi
+                    st.session_state.job = {
+                        'n': name_ui, 'e': email_ui, 'p': pass_ui,
+                        's': sub_ui, 'b': body_ui, 'r': targets
+                    }
+                    st.session_state.busy = True
                     st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
         with col_l:
