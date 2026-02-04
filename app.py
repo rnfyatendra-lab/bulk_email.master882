@@ -2,8 +2,6 @@ import streamlit as st
 import smtplib
 import time
 import concurrent.futures
-import re
-import uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
@@ -37,22 +35,18 @@ if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'is_sending' not in st.session_state: st.session_state.is_sending = False
 if 'frozen_job' not in st.session_state: st.session_state.frozen_job = None
 
-# --- Internal Parallel Worker ---
+# --- Background Worker Function ---
 def send_individual_mail(recipient, job):
     try:
         msg = MIMEMultipart()
-        msg['Subject'] = job['s']
         msg['From'] = formataddr((job['n'], job['e']))
         msg['To'] = recipient
+        msg['Subject'] = job['s']
         msg['Message-ID'] = make_msgid()
-        msg['X-Mailer'] = "Microsoft Outlook 16.0" # Inbox trust booster
-        
-        # Anti-Spam: Adding unique invisible fingerprint
-        tracking_id = f"<div style='display:none;'>Ref-{uuid.uuid4()}</div>"
-        html_body = f"<html><body>{job['b'].replace(chr(10), '<br>')}{tracking_id}</body></html>"
-        msg.attach(MIMEText(html_body, 'html'))
+        msg.attach(MIMEText(job['b'], 'plain'))
 
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=12) as server:
+        # Har thread ke liye naya connection (Parallel Safe)
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
             server.starttls()
             server.login(job['e'], job['p'])
             server.send_message(msg)
@@ -60,22 +54,16 @@ def send_individual_mail(recipient, job):
     except Exception as e:
         return str(e)
 
-# --- Login Logic ---
 if not st.session_state.logged_in:
-    _, col_login, _ = st.columns([1, 1.5, 1])
-    with col_login:
-        st.write("### 🔐 Secure Login")
-        u = st.text_input("Username")
-        p = st.text_input("Password", type="password")
-        if st.button("LOGIN"):
-            if u == "@#2026@#" and p == "@#2026@#":
-                st.session_state.logged_in = True
-                st.rerun()
-            else:
-                st.error("Wrong Username or Password!")
+    u = st.text_input("Username")
+    p = st.text_input("Password", type="password")
+    if st.button("LOGIN"):
+        if u == "@#2026@#" and p == "@#2026@#":
+            st.session_state.logged_in = True
+            st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center;'>📧 Turbo Parallel Launcher</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>📧 Fast Parallel Mailer</h2>", unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1: s_name = st.text_input("Sender Name", key="sn")
@@ -89,38 +77,33 @@ else:
 
     # --- SENDING ENGINE ---
     if st.session_state.is_sending:
-        st.button("⌛ Sending Parallel Batches... (UI Safe to Edit)", disabled=True)
+        st.button("⌛ Parallel Sending Active... (Input boxes are safe to edit)", disabled=True)
+        
         job = st.session_state.frozen_job
         total = len(job['r'])
         p_bar = st.progress(0)
         status = st.empty()
-        
         success_count = 0
-        failed_count = 0
+        
+        
 
-        # High Speed Parallel Execution
+        # ThreadPoolExecutor se speed fast hogi
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(send_individual_mail, email, job): email for email in job['r']}
+            future_to_email = {executor.submit(send_individual_mail, email, job): email for email in job['r']}
             
-            for i, future in enumerate(concurrent.futures.as_completed(futures)):
+            for i, future in enumerate(concurrent.futures.as_completed(future_to_email)):
                 result = future.result()
                 if result is True:
                     success_count += 1
-                else:
-                    if "authentication" in str(result).lower():
-                        st.error("❌ App Password Wrong! Stopping job.")
-                        st.session_state.is_sending = False
-                        st.stop()
-                    failed_count += 1
                 
-                # Update UI Progress
-                progress = (i + 1) / total
-                p_bar.progress(progress)
-                status.text(f"🚀 Progress: {i+1}/{total} | Inboxed: {success_count} | Failed: {failed_count}")
+                # Update UI
+                current_progress = (i + 1) / total
+                p_bar.progress(current_progress)
+                status.text(f"Progress: {i+1}/{total} | Success: {success_count}")
 
         st.session_state.is_sending = False
         st.session_state.frozen_job = None
-        st.success(f"✅ Mission Complete! {success_count} Mails Sent.")
+        st.success(f"✅ Kaam Ho Gaya! {success_count} mails successfully chale gaye.")
         st.balloons()
         time.sleep(2)
         st.rerun()
@@ -130,6 +113,7 @@ else:
         with btn_col:
             if st.button("Send All"):
                 unique_emails = list(dict.fromkeys([e.strip() for e in recipients_raw.replace(',', '\n').split('\n') if e.strip()]))
+                
                 if s_email and s_pass and unique_emails:
                     st.session_state.frozen_job = {
                         'n': s_name, 'e': s_email, 'p': s_pass,
@@ -142,6 +126,7 @@ else:
 
         with logout_col:
             if st.button("Logout"):
+                st.session_state.auth = False # Changed to match logic
                 st.session_state.logged_in = False
                 st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
