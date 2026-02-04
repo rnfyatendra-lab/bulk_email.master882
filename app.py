@@ -8,114 +8,138 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
-# --- Page Config (Clean Title) ---
+# --- Page Config ---
 st.set_page_config(page_title="Console", layout="wide")
 
-# --- UI Styling (Silent Mode) ---
+# --- UI Styling (Clean & Safe) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #ffffff; }
+    .stApp { background-color: #f4f4f9; }
     .main-card {
-        background-color: white; padding: 20px; border-radius: 10px;
-        max-width: 950px; margin: auto; border: 1px solid #f0f0f0;
+        background-color: white; padding: 30px; border-radius: 12px;
+        box-shadow: 0px 5px 15px rgba(0,0,0,0.05);
+        max-width: 950px; margin: auto; border: 1px solid #ddd;
     }
-    input, textarea { color: #000000 !important; font-weight: 400 !important; }
-    div.stButton > button:first-child {
-        width: 100%; height: 60px; background-color: #202124 !important;
-        color: white !important; font-size: 18px !important; border-radius: 5px;
+    input, textarea { color: #000000 !important; font-weight: 500 !important; }
+    div.stButton > button {
+        width: 100%; height: 60px; font-weight: bold; border-radius: 8px;
     }
+    .send-btn button { background-color: #1a73e8 !important; color: white !important; font-size: 18px !important; }
+    .logout-btn button { background-color: #dc3545 !important; color: white !important; }
     header, footer {visibility: hidden;}
     [data-testid="stHeader"] {display: none;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- Logic for Maximum Inboxing ---
-def prepare_safe_content(text):
-    # Unique invisible marker to bypass bulk detection
-    mark = f"<div style='display:none;font-size:0px;'>{uuid.uuid4()}</div>"
-    return f"<html><body>{text.replace('\n', '<br>')}{mark}</body></html>"
+# --- Inbox Bypass Logic ---
+def create_inbox_safe_body(text):
+    # Invisible unique tracking ID for every email
+    hidden_marker = f"<div style='display:none;font-size:0px;color:white;'>{uuid.uuid4()}</div>"
+    return f"<html><body style='font-family: Arial, sans-serif;'>{text.replace('\n', '<br>')}{hidden_marker}</body></html>"
 
 # --- High Speed Parallel Engine ---
-def execute_parallel_task(recipient, job):
+def parallel_mail_engine(target, job_data):
     try:
         msg = MIMEMultipart()
-        msg['Subject'] = job['s']
-        msg['From'] = formataddr((job['n'], job['e']))
-        msg['To'] = recipient
+        msg['Subject'] = job_data['s']
+        msg['From'] = formataddr((job_data['n'], job_data['e']))
+        msg['To'] = target
         msg['Message-ID'] = make_msgid()
-        msg['X-Mailer'] = "Outlook" # Trusted header
+        # Spoofing as a trusted corporate mailer
+        msg['X-Mailer'] = "Microsoft Outlook 16.0" 
+        msg['X-Priority'] = '3'
 
-        msg.attach(MIMEText(prepare_safe_content(job['b']), 'html'))
+        msg.attach(MIMEText(create_inbox_safe_body(job_data['b']), 'html'))
 
-        with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=12) as server:
             server.starttls()
-            server.login(job['e'], job['p'])
+            server.login(job_data['e'], job_data['p'])
             server.send_message(msg)
         return True
     except:
         return False
 
-# --- Persistence Session State ---
+# --- Session Management ---
 if 'auth' not in st.session_state: st.session_state.auth = False
-if 'active' not in st.session_state: st.session_state.active = False
-if 'task' not in st.session_state: st.session_state.task = None
+if 'is_running' not in st.session_state: st.session_state.is_running = False
+if 'frozen_task' not in st.session_state: st.session_state.frozen_task = None
 
-# --- Minimal Login ---
+# --- Login UI ---
 if not st.session_state.auth:
     _, col, _ = st.columns([1, 1, 1])
     with col:
+        st.write("### 🔐 Authentication")
         u = st.text_input("Username")
         p = st.text_input("Password", type="password")
-        if st.button("ENTER"):
+        if st.button("LOGIN"):
             if u == "YATENDRA LODHI" and p == "YATENDRA LODHI":
                 st.session_state.auth = True
                 st.rerun()
+            else:
+                st.error("Access Denied.")
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
     
-    # Inputs remain editable during background process
+    # Input fields remain active for next ID preparation
     c1, c2 = st.columns(2)
-    with c1: name_val = st.text_input("Display Name", key="n")
-    with c2: email_val = st.text_input("Email", key="e")
+    with c1: name_ui = st.text_input("Sender Name", key="name")
+    with c2: email_ui = st.text_input("Gmail ID", key="email")
     
     c3, c4 = st.columns(2)
-    with c3: pass_val = st.text_input("App Key", type="password", key="p")
-    with c4: sub_val = st.text_input("Subject Line", key="s")
+    with c3: pass_ui = st.text_input("App Password", type="password", key="pass")
+    with c4: sub_ui = st.text_input("Subject", key="subject")
     
     c5, c6 = st.columns(2)
-    with c5: body_val = st.text_area("Content", height=150, key="b")
-    with c6: list_val = st.text_area("Targets", height=150, key="r")
+    with c5: body_ui = st.text_area("Message Body", height=150, key="body")
+    with c6: list_ui = st.text_area("Recipient List", height=150, key="list")
 
-    # --- Processing ---
-    if st.session_state.active:
-        st.write("⏱️ Process active in background...")
-        job = st.session_state.task
-        bar = st.progress(0)
-        success = 0
-
-        # Parallel Execution for High Speed
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(execute_parallel_task, target, job): target for target in job['r']}
-            for i, f in enumerate(concurrent.futures.as_completed(futures)):
-                if f.result() is True: success += 1
-                bar.progress((i + 1) / len(job['r']))
+    # --- Background Sending Process ---
+    if st.session_state.is_running:
+        st.info(f"⚡ Batch active for: {st.session_state.frozen_task['e']}")
+        job = st.session_state.frozen_task
+        progress_bar = st.progress(0)
+        success_count = 0
         
-        st.session_state.active = False
-        st.session_state.task = None
-        st.success(f"Completed: {success} delivered.")
+        
+
+        # Multi-threading (3 Workers) for speed + inbox safety
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(parallel_mail_engine, email, job): email for email in job['r']}
+            for i, f in enumerate(concurrent.futures.as_completed(futures)):
+                if f.result() is True: success_count += 1
+                progress_bar.progress((i + 1) / len(job['r']))
+        
+        st.session_state.is_running = False
+        st.session_state.frozen_task = None
+        st.success(f"Task Completed: {success_count} Inboxed.")
         time.sleep(1)
         st.rerun()
             
     else:
-        if st.button("EXECUTE"):
-            targets = list(dict.fromkeys([x.strip() for x in list_val.replace(',', '\n').split('\n') if x.strip()]))
-            if email_val and pass_val and targets:
-                # FREEZE/SNAPSHOT: Locked for background processing
-                st.session_state.task = {
-                    'n': name_val, 'e': email_val, 'p': pass_val,
-                    's': sub_val, 'b': body_val, 'r': targets
-                }
-                st.session_state.active = True
+        st.write("")
+        col_send, col_logout = st.columns([0.8, 0.2])
+        
+        with col_send:
+            st.markdown('<div class="send-btn">', unsafe_allow_html=True)
+            if st.button("Send All"):
+                emails = list(dict.fromkeys([x.strip() for x in list_ui.replace(',', '\n').split('\n') if x.strip()]))
+                if email_ui and pass_ui and emails:
+                    # SNAPSHOT: Data frozen for background process
+                    st.session_state.frozen_task = {
+                        'n': name_ui, 'e': email_ui, 'p': pass_ui,
+                        's': sub_ui, 'b': body_ui, 'r': emails
+                    }
+                    st.session_state.is_running = True
+                    st.rerun()
+                else:
+                    st.warning("Please fill all details.")
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        with col_logout:
+            st.markdown('<div class="logout-btn">', unsafe_allow_html=True)
+            if st.button("Logout"):
+                st.session_state.auth = False
                 st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
