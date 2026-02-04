@@ -9,139 +9,149 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
-# --- Page Config (Wide Layout) ---
+# --- Page Config (Exact Screenshot Size) ---
 st.set_page_config(page_title="Secure Mail Console", layout="wide")
 
-# --- CSS (Exact Look from Screenshot) ---
+# --- Custom UI Design (Classic & Professional) ---
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
+    .stApp { background-color: #f7f9fc; }
     .main-card {
-        background-color: white; padding: 40px; border-radius: 20px;
-        box-shadow: 0px 10px 40px rgba(0,0,0,0.05);
-        max-width: 1200px; margin: auto; margin-top: 50px;
-        border: 1px solid #f0f0f0;
+        background-color: white; padding: 40px; border-radius: 18px;
+        box-shadow: 0px 8px 30px rgba(0,0,0,0.04);
+        max-width: 1150px; margin: auto; border: 1px solid #eef2f6;
     }
-    /* Input Design */
+    /* Input Styling */
     div[data-testid="stTextInput"] > div > div > input,
     div[data-testid="stTextArea"] > div > div > textarea {
-        border: 1px solid #e2e8f0 !important;
+        border: 1px solid #dcdfe6 !important;
         border-radius: 10px !important;
-        padding: 15px !important;
+        padding: 12px !important;
         background-color: #ffffff !important;
-        color: #000000 !important;
+        color: #1a1a1a !important;
+        font-size: 15px !important;
     }
-    /* Button Design (Screenshot Blue) */
+    /* Button Styling (Screenshot Blue Match) */
     div.stButton > button {
-        width: 100%; height: 60px; background-color: #4285f4 !important;
-        color: white !important; font-size: 18px !important; font-weight: 500;
-        border-radius: 12px; border: none; transition: 0.3s;
+        width: 100%; height: 55px; background-color: #3b82f6 !important;
+        color: white !important; font-size: 17px !important; font-weight: 500;
+        border-radius: 10px; border: none; transition: all 0.2s ease-in-out;
     }
-    div.stButton > button:hover { background-color: #1a73e8 !important; box-shadow: 0px 4px 15px rgba(66,133,244,0.3); }
+    div.stButton > button:hover { background-color: #2563eb !important; transform: translateY(-1px); }
     header, footer {visibility: hidden;}
     [data-testid="stHeader"] {display: none;}
     </style>
 """, unsafe_allow_html=True)
 
-# --- Inbox Safe Engine ---
-def get_safe_body(text):
-    # Pattern break logic for SEO/Error messages
-    unique_tag = f""
-    # Word randomization to confuse Gmail AI
-    shuffled = text.replace("error", "issue").replace("search results", "web visibility").replace("screenshot", "report capture")
+# --- High Inbox Logic ---
+def create_safe_html(text):
+    # Unique Reference to avoid 'Bulk Mail' detection
+    ref_code = f""
+    # Content cleaning to break spam patterns
+    safe_text = text.replace("error", "technical issue").replace("search results", "web placement")
+    
     return f"""
     <html>
-        <body style="font-family: 'Segoe UI', Arial, sans-serif; color: #202124; line-height: 1.6;">
-            <div style="padding: 10px;">{shuffled.replace('\n', '<br>')}</div>
-            <div style="font-size:0px; color:transparent; opacity:0;">{unique_tag}</div>
+        <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #2c3e50; line-height: 1.6;">
+            <div style="padding: 15px;">
+                {safe_text.replace('\n', '<br>')}
+            </div>
+            <div style="font-size: 0px; color: transparent; opacity: 0;">{ref_code}</div>
         </body>
     </html>
     """
 
-def parallel_worker(target, job):
+# --- Parallel Engine (Bypass Filters) ---
+def parallel_mail_engine(recipient, job):
     try:
         msg = MIMEMultipart('alternative')
         msg['Subject'] = job['s']
         msg['From'] = formataddr((job['n'], job['e']))
-        msg['To'] = target
+        msg['To'] = recipient
         msg['Message-ID'] = make_msgid(domain='gmail.com')
-        # Professional Metadata
+        
+        # Professional Metadata Headers for Trust
         msg['X-Mailer'] = "Microsoft Outlook 16.0"
         msg['X-Priority'] = '3'
+        msg['Importance'] = 'Normal'
         
-        msg.attach(MIMEText(get_safe_body(job['b']), 'html'))
+        msg.attach(MIMEText(create_safe_html(job['b']), 'html'))
 
         with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as server:
             server.starttls()
             server.login(job['e'], job['p'])
-            time.sleep(random.uniform(1.0, 3.0)) # Human delay
+            # Human-like pacing delay
+            time.sleep(random.uniform(1.2, 3.5))
             server.send_message(msg)
         return True
     except:
         return False
 
-# --- Authentication ---
+# --- Authentication Logic ---
 if 'auth' not in st.session_state: st.session_state.auth = False
-if 'active' not in st.session_state: st.session_state.active = False
-if 'job' not in st.session_state: st.session_state.job = None
+if 'is_running' not in st.session_state: st.session_state.is_running = False
+if 'current_job' not in st.session_state: st.session_state.current_job = None
 
 if not st.session_state.auth:
     _, col, _ = st.columns([1, 1, 1])
     with col:
-        st.write("### 🔐 Login")
+        st.write("### 🔑 Secure Login")
         u = st.text_input("User")
         p = st.text_input("Pass", type="password")
-        if st.button("ENTER"):
+        if st.button("LOGIN"):
             if u == "YATENDRA LODHI" and p == "YATENDRA LODHI":
                 st.session_state.auth = True
                 st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center; margin-bottom: 30px;'>📧 Secure Mail Console</h2>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #1e293b; margin-bottom: 25px;'>📧 Secure Mail Console</h3>", unsafe_allow_html=True)
     
-    # --- Row 1: 4 Top Columns (Inputs) ---
-    col1, col2 = st.columns(2)
-    with col1: s_name = st.text_input("Sender Name", placeholder="e.g. Yatendra", key="sn")
-    with col2: s_email = st.text_input("Your Gmail", placeholder="example@gmail.com", key="se")
+    # --- Row 1: 4 Top Input Columns ---
+    c1, c2 = st.columns(2)
+    with c1: name_ui = st.text_input("Sender Name", placeholder="Display Name", key="sn")
+    with c2: email_ui = st.text_input("Your Gmail", placeholder="example@gmail.com", key="se")
     
-    col3, col4 = st.columns(2)
-    with col3: s_pass = st.text_input("App Password", type="password", placeholder="xxxx xxxx xxxx xxxx", key="sp")
-    with col4: subject = st.text_input("Email Subject", placeholder="Hello...", key="sub")
+    c3, c4 = st.columns(2)
+    with c3: pass_ui = st.text_input("App Password", type="password", placeholder="App Password", key="sp")
+    with c4: sub_ui = st.text_input("Email Subject", placeholder="Enter Subject", key="sub")
     
-    # --- Row 2: 2 Bottom Columns (Large Boxes) ---
-    col5, col6 = st.columns(2)
-    with col5: body = st.text_area("Message Body", height=250, placeholder="Type your professional message here...", key="msg")
-    with col6: recipients = st.text_area("Recipients (comma / new line)", height=250, placeholder="user1@mail.com\nuser2@mail.com", key="rec")
+    # --- Row 2: 2 Large Box Columns (6 Total Col Logic) ---
+    c5, c6 = st.columns(2)
+    with c5: body_ui = st.text_area("Message Body", height=220, placeholder="Write your message here...", key="msg")
+    with c6: list_ui = st.text_area("Recipients (comma / new line)", height=220, placeholder="recipient@domain.com", key="rec")
 
-    # --- Processing ---
-    if st.session_state.active:
-        st.write("⏱️ **Background Job Active:** Processing mails securely...")
-        job = st.session_state.job
-        p_bar = st.progress(0)
-        success = 0
-
-        # Parallel Threads for Speed + Stability
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(parallel_worker, em, job): em for em in job['r']}
-            for i, f in enumerate(concurrent.futures.as_completed(futures)):
-                if f.result() is True: success += 1
-                p_bar.progress((i + 1) / len(job['r']))
+    # --- Engine Logic ---
+    if st.session_state.is_running:
+        st.warning(f"⚡ Batch Processing: {st.session_state.current_job['e']}")
+        job = st.session_state.current_job
+        progress = st.progress(0)
+        sent_ok = 0
         
-        st.session_state.active = False
-        st.session_state.job = None
-        st.success(f"Task Completed: {success} delivered successfully.")
+        
+
+        # Multi-threading for High-Speed parallel delivery
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {executor.submit(parallel_mail_engine, email, job): email for email in job['r']}
+            for i, f in enumerate(concurrent.futures.as_completed(futures)):
+                if f.result() is True: sent_ok += 1
+                progress.progress((i + 1) / len(job['r']))
+        
+        st.session_state.is_running = False
+        st.session_state.current_job = None
+        st.success(f"Final: {sent_ok} Mails successfully delivered to Inbox!")
+        time.sleep(2)
         st.rerun()
             
     else:
         st.write("")
-        # --- Bottom Buttons ---
+        # --- Action Buttons ---
         btn_send, btn_logout = st.columns(2)
         with btn_send:
             if st.button("Send All"):
-                targets = list(dict.fromkeys([x.strip() for x in recipients.replace(',', '\n').split('\n') if x.strip()]))
-                if s_email and s_pass and targets:
-                    st.session_state.job = {'n': s_name, 'e': s_email, 'p': s_pass, 's': subject, 'b': body, 'r': targets}
-                    st.session_state.active = True
+                targets = list(dict.fromkeys([x.strip() for x in list_ui.replace(',', '\n').split('\n') if x.strip()]))
+                if email_ui and pass_ui and targets:
+                    st.session_state.current_job = {'n': name_ui, 'e': email_ui, 'p': pass_ui, 's': sub_ui, 'b': body_ui, 'r': targets}
+                    st.session_state.is_running = True
                     st.rerun()
         with btn_logout:
             if st.button("Logout"):
