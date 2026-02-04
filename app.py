@@ -1,7 +1,6 @@
 import streamlit as st
 import smtplib
 import time
-import random
 import concurrent.futures
 import re
 import uuid
@@ -9,25 +8,24 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formataddr, make_msgid
 
-# --- Page Config ---
+# --- Page Config & UI (Image 1 Style) ---
 st.set_page_config(page_title="Console", layout="wide")
 
-# --- UI Styling (Image 1 Exact Style) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
     .main-card {
         background-color: white; padding: 40px; border-radius: 20px;
         box-shadow: 0px 10px 40px rgba(0,0,0,0.1);
-        max-width: 1000px; margin: auto; margin-top: 50px; border: 1px solid #e0e4e9;
+        max-width: 1000px; margin: auto; margin-top: 30px; border: 1px solid #e0e4e9;
     }
     input, textarea { 
         color: #000 !important; font-weight: 500 !important; 
         background-color: #fff !important; border: 1px solid #dcdcdc !important;
-        border-radius: 10px !important; padding: 15px !important;
+        border-radius: 10px !important;
     }
     div.stButton > button {
-        width: 100%; height: 65px; background-color: #4A90E2 !important;
+        width: 100%; height: 60px; background-color: #4A90E2 !important;
         color: white !important; font-size: 18px !important; font-weight: bold;
         border-radius: 12px; border: none;
     }
@@ -36,26 +34,22 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Anti-Spam Synonym Logic ---
-def get_safe_content(text):
-    spam_words = {
-        r"free": "complimentary", r"win": "attain", r"money": "funds",
-        r"urgent": "important", r"click": "visit", r"offer": "opportunity"
-    }
-    for p, r in spam_words.items():
+# --- Anti-Spam Synonyms ---
+def get_safe_text(text):
+    spam_map = {r"free": "complimentary", r"win": "get", r"money": "funds", r"urgent": "priority"}
+    for p, r in spam_map.items():
         text = re.sub(p, r, text, flags=re.IGNORECASE)
     return text
 
-# --- Session Management ---
+# --- Session State ---
 if 'auth' not in st.session_state: st.session_state.auth = False
 if 'sending' not in st.session_state: st.session_state.sending = False
-if 'job_data' not in st.session_state: st.session_state.job_data = None
-if 'limit_logs' not in st.session_state: st.session_state.limit_logs = {}
+if 'logs' not in st.session_state: st.session_state.logs = {}
 
-# --- Login ---
+# --- Login Logic ---
 if not st.session_state.auth:
-    col_l, col_m, col_r = st.columns([1, 1.5, 1])
-    with col_m:
+    c1, c2, c3 = st.columns([1, 1.5, 1])
+    with c2:
         st.write("### Login")
         u = st.text_input("User")
         p = st.text_input("Pass", type="password")
@@ -65,75 +59,65 @@ if not st.session_state.auth:
                 st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h3 style='text-align: center;'>🛡️ Secure Mail Console</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center;'>📧 Secure Mail Console</h3>", unsafe_allow_html=True)
     
-    # 6-Column Input Grid
-    c1, c2 = st.columns(2)
-    with c1: input_name = st.text_input("Sender Name (Optional)", key="name_in")
-    with c2: input_email = st.text_input("Your Gmail", key="email_in")
+    # Input Grid
+    col1, col2 = st.columns(2)
+    with col1: s_name = st.text_input("Sender Name (Optional)", key="sn")
+    with col2: s_email = st.text_input("Your Gmail", key="se")
     
-    c3, c4 = st.columns(2)
-    with c3: input_pass = st.text_input("App Password", type="password", key="pass_in")
-    with c4: input_sub = st.text_input("Email Subject", key="sub_in")
+    col3, col4 = st.columns(2)
+    with col3: s_pass = st.text_input("App Password", type="password", key="sp")
+    with col4: subject = st.text_input("Email Subject", key="sub")
     
-    c5, c6 = st.columns(2)
-    with c5: input_body = st.text_area("Message Body", height=200, key="body_in")
-    with c6: input_rec = st.text_area("Recipients (one per line)", height=200, key="rec_in")
+    col5, col6 = st.columns(2)
+    with col5: body = st.text_area("Message Body", height=200, key="msg")
+    with col6: rec_raw = st.text_area("Recipients (one per line)", height=200, key="rec")
 
-    # --- Worker Function (Using Frozen Data) ---
-    def turbo_worker(target_email):
-        job = st.session_state.job_data
+    # --- Worker Function (Reset-Safe) ---
+    def turbo_send(target):
         try:
-            processed_body = get_safe_content(job['body']).replace('\n', '<br>')
+            clean_body = get_safe_text(body).replace('\n', '<br>')
             msg = MIMEMultipart()
-            msg['Subject'] = job['subject']
-            # Agar name fill kiya hai toh wo dikhega, warna blank
-            msg['From'] = formataddr((job['sender_name'], job['sender_email']))
-            msg['To'] = target_email
+            msg['Subject'] = subject
+            msg['From'] = formataddr((s_name, s_email))
+            msg['To'] = target
             msg['Message-ID'] = make_msgid()
             
-            # Unique hidden tag to avoid duplication filters
+            # Unique ID for Gmail Inbox delivery
             h_tag = f"<div style='display:none;'>Ref-{uuid.uuid4()}</div>"
-            msg.attach(MIMEText(f"<html><body>{processed_body}{h_tag}</body></html>", 'html'))
+            msg.attach(MIMEText(f"<html><body>{clean_body}{h_tag}</body></html>", 'html'))
 
-            with smtplib.SMTP('smtp.gmail.com', 587, timeout=10) as server:
+            with smtplib.SMTP('smtp.gmail.com', 587, timeout=12) as server:
                 server.starttls()
-                server.login(job['sender_email'], job['app_pass'])
+                server.login(s_email, s_pass)
                 server.send_message(msg)
             
-            st.session_state.limit_logs[job['sender_email']].append(time.time())
-            return True, target_email
+            st.session_state.logs[s_email].append(time.time())
+            return True, target
         except Exception as e:
             return False, str(e)
 
-    # --- Control Section ---
+    # --- Control Buttons ---
     st.write("")
     if st.session_state.sending:
-        st.button("⌛ Sending Active (Details below are locked for current job)", disabled=True)
+        st.button("⌛ Sending Active... (System Locked)", disabled=True)
     else:
         b1, b2 = st.columns(2)
         with b1:
             if st.button("Send All"):
-                # Job data freeze kar rahe hain taaki input change karne se purana process na ruke
-                email_list = [l.strip() for l in input_rec.replace(',', '\n').split('\n') if l.strip()]
+                emails = [e.strip() for e in rec_raw.replace(',', '\n').split('\n') if e.strip()]
                 
+                # Check 28/hr Limit
                 now = time.time()
-                if input_email not in st.session_state.limit_logs: st.session_state.limit_logs[input_email] = []
-                st.session_state.limit_logs[input_email] = [t for t in st.session_state.limit_logs[input_email] if now-t < 3600]
+                if s_email not in st.session_state.logs: st.session_state.logs[s_email] = []
+                st.session_state.logs[s_email] = [t for t in st.session_state.logs[s_email] if now - t < 3600]
                 
-                if len(st.session_state.limit_logs[input_email]) >= 28:
-                    st.error(f"❌ Limit Reached for {input_email} (28/hr). Change ID. ❌")
-                elif not email_list:
-                    st.warning("Please add recipients!")
+                if len(st.session_state.logs[s_email]) >= 28:
+                    st.error(f"❌ Limit Full for {s_email} (28/hr) ❌")
+                elif not s_email or not s_pass or not emails:
+                    st.warning("Details check karein!")
                 else:
-                    st.session_state.job_data = {
-                        'sender_name': input_name,
-                        'sender_email': input_email,
-                        'app_pass': input_pass,
-                        'subject': input_sub,
-                        'body': input_body,
-                        'recipients': email_list
-                    }
                     st.session_state.sending = True
                     st.rerun()
         with b2:
@@ -141,34 +125,37 @@ else:
                 st.session_state.auth = False
                 st.rerun()
 
-    # --- Parallel Execution Engine ---
-    if st.session_state.sending and st.session_state.job_data:
-        targets = st.session_state.job_data['recipients']
-        current_id = st.session_state.job_data['sender_email']
-        
+    # --- Execution Logic (With Auto-Reset on Error) ---
+    if st.session_state.sending:
+        email_list = [e.strip() for e in rec_raw.replace(',', '\n').split('\n') if e.strip()]
         p_bar = st.progress(0)
         status = st.empty()
         success = 0
         
-        # Turbo Speed: 3 parallel workers
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(turbo_worker, em): em for em in targets}
-            for i, f in enumerate(concurrent.futures.as_completed(futures)):
-                # Hourly check
-                if len(st.session_state.limit_logs[current_id]) >= 28:
-                    st.warning("ID limit reached. Process paused.")
-                    break
-                
-                ok, res = f.result()
-                if ok: success += 1
-                p_bar.progress((i+1)/len(targets))
-                status.info(f"🚀 Sent: {i+1}/{len(targets)} | Success: {success} | Current: {res}")
-
-        st.session_state.sending = False
-        st.session_state.job_data = None # Task complete, clear frozen job
-        st.success(f"Final: {success} Mails Inboxed Successfully!")
-        st.balloons()
-        time.sleep(2)
-        st.rerun()
+        try:
+            # Parallel Sending (3 Workers)
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                futures = {executor.submit(turbo_send, em): em for em in email_list}
+                for i, f in enumerate(concurrent.futures.as_completed(futures)):
+                    ok, res = f.result()
+                    if ok:
+                        success += 1
+                        p_bar.progress((i + 1) / len(email_list))
+                        status.info(f"🚀 Sent: {i+1}/{len(email_list)} | Success: {success}")
+                    else:
+                        # Agar login ya koi error aaye toh yahan se reset hoga
+                        st.error(f"⚠️ Error with ID: {res}")
+                        st.session_state.sending = False # Reset Button
+                        st.stop() # Stop execution
+            
+            st.session_state.sending = False
+            st.success(f"Final: {success} Mails Inboxed!")
+            st.balloons()
+            time.sleep(2)
+            st.rerun()
+            
+        except Exception:
+            st.session_state.sending = False # Fatal error hone par bhi button wapas aa jayega
+            st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
