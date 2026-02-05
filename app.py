@@ -29,11 +29,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Safe Sending Engine ---
-def send_safe_parallel(r_id, job):
+# --- Safe & Fast Sending Function ---
+def send_ultra_safe_mail(r_id, job):
     try:
-        # Anti-Spam Tip: Chota sa random delay (Jitter)
-        time.sleep(random.uniform(0.1, 0.3)) 
+        # Micro-jitter (Human mimicry)
+        time.sleep(random.uniform(0.1, 0.5))
         
         server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
         server.starttls()
@@ -44,21 +44,21 @@ def send_safe_parallel(r_id, job):
         msg['To'] = r_id
         msg['Subject'] = job['s']
         
-        # --- Inbox Delivery Optimization Headers ---
+        # --- Advanced Anti-Spam Headers ---
         msg['Date'] = formatdate(localtime=True)
         msg['Message-ID'] = make_msgid()
-        msg['X-Priority'] = '3'  # Normal Priority
-        msg['X-Mailer'] = 'Python-SMTPLib-V3'
+        msg['X-Mailer'] = 'Radhe-Radhe-V5-Secure'
+        msg['List-Unsubscribe'] = f"<mailto:{job['e']}?subject=unsubscribe>"
         
         msg.attach(MIMEText(job['b'], 'plain'))
         
         server.send_message(msg)
         server.quit()
-        return True
+        return True, r_id
     except Exception as e:
-        return False
+        return False, str(e)
 
-# --- UI & State Logic ---
+# --- Session State ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'is_sending' not in st.session_state: st.session_state.is_sending = False
 
@@ -71,7 +71,7 @@ if not st.session_state.logged_in:
             st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center;'>📧 Fast & Safe Mail Launcher</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>📧 Fast Mail Launcher (Safe Mode)</h2>", unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1: s_name = st.text_input("Sender Name", key="sn")
@@ -86,21 +86,35 @@ else:
     if st.session_state.is_sending:
         job = st.session_state.frozen_job
         recipients = job['r']
+        total = len(recipients)
         
-        status_box = st.info(f"🚀 Batch Sending: 25 emails in 9 parallel groups...")
+        st.button("⌛ Delivering Mails...", disabled=True)
+        p_bar = st.progress(0)
+        status = st.empty()
+        
+        success_count = 0
         start_time = time.time()
-        
-        # Max Workers = 5-8 is safest for Gmail
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            results = list(executor.map(lambda r: send_safe_parallel(r, job), recipients))
-        
+
+        # Safely handling 25 emails in small parallel batches
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = [executor.submit(send_ultra_safe_mail, r, job) for r in recipients]
+            
+            for i, future in enumerate(futures):
+                res, info = future.result()
+                if res: success_count += 1
+                
+                # Live Counter Update
+                curr = i + 1
+                p_bar.progress(curr / total)
+                status.text(f"Processed: {curr}/{total} | Last Sent: {recipients[i]}")
+
         total_time = round(time.time() - start_time, 2)
-        st.success(f"✅ Success! {sum(results)} Mails delivered in {total_time}s")
+        st.success(f"✅ Success! {success_count}/{total} Mails sent in {total_time}s")
         st.session_state.is_sending = False
         st.balloons()
-        time.sleep(2)
+        time.sleep(3)
         st.rerun()
-        
+
     else:
         btn_col, logout_col = st.columns([0.8, 0.2])
         with btn_col:
@@ -110,7 +124,6 @@ else:
                     st.session_state.frozen_job = {'n':s_name, 'e':s_email, 'p':s_pass, 's':subject, 'b':body, 'r':emails}
                     st.session_state.is_sending = True
                     st.rerun()
-
         with logout_col:
             if st.button("Logout"):
                 st.session_state.logged_in = False
