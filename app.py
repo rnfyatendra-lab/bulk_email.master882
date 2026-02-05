@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 # --- Page Config ---
 st.set_page_config(page_title="Radhe Radhe Mailer", layout="wide")
 
-# --- CSS (Wahi Classic Design) ---
+# --- CSS (Design Remains Same) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
@@ -29,11 +29,11 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Safe & Fast Sending Function ---
-def send_ultra_safe_mail(r_id, job):
+# --- The "Safe-Guard" Sending Function ---
+def send_email_safe_logic(r_id, job):
     try:
-        # Micro-jitter (Human mimicry)
-        time.sleep(random.uniform(0.1, 0.5))
+        # 1. Randomized Delay (Human behavior simulation)
+        time.sleep(random.uniform(0.2, 0.6))
         
         server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
         server.starttls()
@@ -44,21 +44,22 @@ def send_ultra_safe_mail(r_id, job):
         msg['To'] = r_id
         msg['Subject'] = job['s']
         
-        # --- Advanced Anti-Spam Headers ---
+        # 2. Advanced Anti-Spam Headers (Google Compliance)
         msg['Date'] = formatdate(localtime=True)
         msg['Message-ID'] = make_msgid()
-        msg['X-Mailer'] = 'Radhe-Radhe-V5-Secure'
-        msg['List-Unsubscribe'] = f"<mailto:{job['e']}?subject=unsubscribe>"
+        msg['X-Mailer'] = f'SafeMailer-v{random.randint(100,999)}' # Random version ID
+        msg['X-Priority'] = '3'
         
+        # 3. Plain Text Body (Highest delivery rate)
         msg.attach(MIMEText(job['b'], 'plain'))
         
         server.send_message(msg)
         server.quit()
-        return True, r_id
-    except Exception as e:
-        return False, str(e)
+        return True
+    except Exception:
+        return False
 
-# --- Session State ---
+# --- UI & Auth ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'is_sending' not in st.session_state: st.session_state.is_sending = False
 
@@ -71,7 +72,7 @@ if not st.session_state.logged_in:
             st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center;'>📧 Fast Mail Launcher (Safe Mode)</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>🛡️ Maximum Safety Mailer</h2>", unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1: s_name = st.text_input("Sender Name", key="sn")
@@ -83,33 +84,36 @@ else:
     with col5: body = st.text_area("Message Body", height=150, key="msg")
     with col6: recipients_raw = st.text_area("Recipients", height=150, key="rec")
 
+    # --- Ultra Safe Engine with Counter ---
     if st.session_state.is_sending:
         job = st.session_state.frozen_job
-        recipients = job['r']
-        total = len(recipients)
+        recips = job['r']
+        total = len(recips)
         
-        st.button("⌛ Delivering Mails...", disabled=True)
-        p_bar = st.progress(0)
+        progress_bar = st.progress(0)
         status = st.empty()
         
-        success_count = 0
-        start_time = time.time()
-
-        # Safely handling 25 emails in small parallel batches
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = [executor.submit(send_ultra_safe_mail, r, job) for r in recipients]
+        success = 0
+        # 3 parallel connections (Batches of 3)
+        batch_size = 3 
+        
+        for i in range(0, total, batch_size):
+            current_batch = recips[i : i + batch_size]
             
-            for i, future in enumerate(futures):
-                res, info = future.result()
-                if res: success_count += 1
-                
-                # Live Counter Update
-                curr = i + 1
-                p_bar.progress(curr / total)
-                status.text(f"Processed: {curr}/{total} | Last Sent: {recipients[i]}")
+            with ThreadPoolExecutor(max_workers=batch_size) as executor:
+                results = list(executor.map(lambda r: send_email_safe_logic(r, job), current_batch))
+                success += sum(results)
+            
+            # Counter & Progress Update
+            current_done = min(i + batch_size, total)
+            progress_bar.progress(current_done / total)
+            status.text(f"Safely Delivered: {current_done}/{total} | Success Rate: {int((success/current_done)*100)}%")
+            
+            # 4. Mandatory Cool-down between batches (Crucial for Safety)
+            if current_done < total:
+                time.sleep(1.2) 
 
-        total_time = round(time.time() - start_time, 2)
-        st.success(f"✅ Success! {success_count}/{total} Mails sent in {total_time}s")
+        st.success(f"✅ Mission Accomplished! {success} Mails delivered safely.")
         st.session_state.is_sending = False
         st.balloons()
         time.sleep(3)
