@@ -1,6 +1,7 @@
 import streamlit as st
 import smtplib
 import time
+import random
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate, make_msgid
@@ -9,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 # --- Page Config ---
 st.set_page_config(page_title="Radhe Radhe Mailer", layout="wide")
 
-# --- CSS (Exact Same Design) ---
+# --- CSS (Wahi Classic Design) ---
 st.markdown("""
     <style>
     .stApp { background-color: #f0f2f6; }
@@ -28,31 +29,36 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- Thread-Safe Engine ---
-def send_safe_email(r_id, job):
+# --- Safe Sending Engine ---
+def send_safe_parallel(r_id, job):
     try:
-        # SMTP setup
-        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=12)
+        # Anti-Spam Tip: Chota sa random delay (Jitter)
+        time.sleep(random.uniform(0.1, 0.3)) 
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587, timeout=15)
         server.starttls()
         server.login(job['e'], job['p'])
         
-        # Inbox-Friendly Message Construction
         msg = MIMEMultipart()
         msg['From'] = f"{job['n']} <{job['e']}>"
         msg['To'] = r_id
         msg['Subject'] = job['s']
+        
+        # --- Inbox Delivery Optimization Headers ---
         msg['Date'] = formatdate(localtime=True)
-        msg['Message-ID'] = make_msgid() # Unique ID for each mail to avoid spam filters
+        msg['Message-ID'] = make_msgid()
+        msg['X-Priority'] = '3'  # Normal Priority
+        msg['X-Mailer'] = 'Python-SMTPLib-V3'
         
         msg.attach(MIMEText(job['b'], 'plain'))
         
         server.send_message(msg)
         server.quit()
         return True
-    except:
+    except Exception as e:
         return False
 
-# --- Session Management ---
+# --- UI & State Logic ---
 if 'logged_in' not in st.session_state: st.session_state.logged_in = False
 if 'is_sending' not in st.session_state: st.session_state.is_sending = False
 
@@ -65,7 +71,7 @@ if not st.session_state.logged_in:
             st.rerun()
 else:
     st.markdown('<div class="main-card">', unsafe_allow_html=True)
-    st.markdown("<h2 style='text-align: center;'>📧 Fast Mail Launcher</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center;'>📧 Fast & Safe Mail Launcher</h2>", unsafe_allow_html=True)
     
     col1, col2 = st.columns(2)
     with col1: s_name = st.text_input("Sender Name", key="sn")
@@ -77,24 +83,24 @@ else:
     with col5: body = st.text_area("Message Body", height=150, key="msg")
     with col6: recipients_raw = st.text_area("Recipients", height=150, key="rec")
 
-    # --- Engine ---
     if st.session_state.is_sending:
         job = st.session_state.frozen_job
         recipients = job['r']
         
+        status_box = st.info(f"🚀 Batch Sending: 25 emails in 9 parallel groups...")
         start_time = time.time()
-        # Parallel Batches: 3 workers at a time (as per your 9 batch logic) 
-        # but configured for 2-3 sec total time.
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            results = list(executor.map(lambda r: send_safe_email(r, job), recipients))
         
-        duration = round(time.time() - start_time, 2)
-        st.success(f"✅ Fast Delivery Done! Sent: {sum(results)}/ {len(recipients)} in {duration}s")
+        # Max Workers = 5-8 is safest for Gmail
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(lambda r: send_safe_parallel(r, job), recipients))
+        
+        total_time = round(time.time() - start_time, 2)
+        st.success(f"✅ Success! {sum(results)} Mails delivered in {total_time}s")
         st.session_state.is_sending = False
         st.balloons()
         time.sleep(2)
         st.rerun()
-
+        
     else:
         btn_col, logout_col = st.columns([0.8, 0.2])
         with btn_col:
@@ -104,6 +110,7 @@ else:
                     st.session_state.frozen_job = {'n':s_name, 'e':s_email, 'p':s_pass, 's':subject, 'b':body, 'r':emails}
                     st.session_state.is_sending = True
                     st.rerun()
+
         with logout_col:
             if st.button("Logout"):
                 st.session_state.logged_in = False
